@@ -3,3 +3,4 @@ requests
 openai
 google-genai
 anthropic
+together
