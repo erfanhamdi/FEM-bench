@@ -273,11 +273,27 @@ def evaluate_function_output_match(
         
         try:
             ref_out = reference_fcn(*input_args)
-            gen_out = generated_fcn(*input_args)
-            
             test_result["reference_output"] = _serialize_output(ref_out)
+        except Exception as e:
+            test_result["error"] = (
+                f"Reference execution failed: {type(e).__name__}: {e}"
+            )
+            all_match = False
+            detailed_results.append(test_result)
+            continue
+
+        try:
+            gen_out = generated_fcn(*input_args)
             test_result["generated_output"] = _serialize_output(gen_out)
-            
+        except Exception as e:
+            test_result["error"] = (
+                f"Generated execution failed: {type(e).__name__}: {e}"
+            )
+            all_match = False
+            detailed_results.append(test_result)
+            continue
+
+        try:
             match = _outputs_match(
                 ref_out,
                 gen_out,
@@ -285,14 +301,14 @@ def evaluate_function_output_match(
                 allow_sign_flip_for_output_indices=allow_sign_flip_for_output_indices,
             )
             test_result["match"] = match
-            
             if not match:
                 all_match = False
-                
         except Exception as e:
-            test_result["error"] = str(e)
+            test_result["error"] = (
+                f"Output comparison failed: {type(e).__name__}: {e}"
+            )
             all_match = False
-        
+
         detailed_results.append(test_result)
     
     return all_match, detailed_results
