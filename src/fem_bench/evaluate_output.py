@@ -249,7 +249,8 @@ def evaluate_function_output_match(
     reference_fcn,
     generated_fcn,
     inputs: list[list],
-    atol: float = 1e-8
+    atol: float = 1e-8,
+    allow_sign_flip_for_output_indices: Optional[list[int]] = None,
 ) -> tuple[bool, list]:
     """
     Returns (match_result, detailed_results).
@@ -277,7 +278,12 @@ def evaluate_function_output_match(
             test_result["reference_output"] = _serialize_output(ref_out)
             test_result["generated_output"] = _serialize_output(gen_out)
             
-            match = _values_match(ref_out, gen_out, atol=atol)
+            match = _outputs_match(
+                ref_out,
+                gen_out,
+                atol=atol,
+                allow_sign_flip_for_output_indices=allow_sign_flip_for_output_indices,
+            )
             test_result["match"] = match
             
             if not match:
@@ -290,6 +296,45 @@ def evaluate_function_output_match(
         detailed_results.append(test_result)
     
     return all_match, detailed_results
+
+
+def _outputs_match(
+    reference_output: Any,
+    generated_output: Any,
+    *,
+    atol: float,
+    allow_sign_flip_for_output_indices: Optional[list[int]],
+) -> bool:
+    """Compare outputs, optionally allowing selected items to differ by sign."""
+    sign_flip_indices = set(allow_sign_flip_for_output_indices or [])
+    if not sign_flip_indices:
+        return _values_match(reference_output, generated_output, atol=atol)
+    
+    for index, (reference_item, generated_item) in enumerate(
+        zip(reference_output, generated_output)
+    ):
+        if _values_match(reference_item, generated_item, atol=atol):
+            continue
+        if index not in sign_flip_indices:
+            return False
+
+        try:
+            reference_array = np.asarray(reference_item)
+            generated_array = np.asarray(generated_item)
+            if reference_array.shape != generated_array.shape:
+                return False
+            if not np.allclose(
+                reference_array,
+                -generated_array,
+                atol=atol,
+                rtol=1e-5,
+                equal_nan=True,
+            ):
+                return False
+        except Exception:
+            return False
+
+    return True
 
 
 def _serialize_inputs(input_args):
@@ -382,4 +427,3 @@ def evaluate_task_tests(task: Task, reference_fcn: Callable) -> dict:
             results["failure_fail"].append((test_fcn.__name__, failed))
 
     return results
-
